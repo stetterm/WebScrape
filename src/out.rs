@@ -124,6 +124,4 @@ mod tests {
             panic!("Could not get exit signal");
         }
     }
-
-    
 }
