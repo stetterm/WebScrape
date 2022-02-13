@@ -30,6 +30,7 @@ pub mod out {
     pub struct OutThread {
         file_name: &'static str,
         buf: Arc<RwLock<Vec<String>>>,
+        pub thread: Option<thread::JoinHandle<()>>,
     }
 
     ///
@@ -45,8 +46,9 @@ pub mod out {
             let mut ret_out_thread = OutThread {
                 file_name: file_name,
                 buf: Arc::clone(&buf),
+                thread: None,
             };
-            thread::spawn(move || loop {
+            let thread = thread::spawn(move || loop {
                 let data = match pipe.recv() {
                     Ok(s) => s,
                     Err(_) => { 
@@ -90,6 +92,7 @@ pub mod out {
             OutThread {
                 file_name: file_name,
                 buf: Arc::clone(&buf),
+                thread: Some(thread),
             }
         }
 
@@ -127,10 +130,10 @@ mod tests {
     #[test]
     fn test_data_output() {
         let (sender, receiver) = mpsc::channel();
-        let _test = out::OutThread::new(receiver, "out.txt");
+        let test = out::OutThread::new(receiver, "out.txt");
         for _ in 0..33 {
             sender.send("hello".to_string()).unwrap();
         }
-        thread::sleep(time::Duration::from_secs(2));
+        
     }
 }
