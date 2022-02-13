@@ -47,9 +47,7 @@ pub mod out {
                         if let Err(_) = ret_out_thread.flush(buf) {
                             panic!("Could not flush the buffer.");
                         }
-                        if let Err(_) = exit_sig.send(Ok(())) {
-                            panic!("Could not send exit signal");
-                        }
+                        while let Err(_) = exit_sig.send(Ok(())) {}
                         break;
                     },
                 };
@@ -57,6 +55,7 @@ pub mod out {
                     let mut file = match OpenOptions::new()
                         .write(true)
                         .append(true)
+                        .create(true)
                         .open(file_name) {
                             Ok(f) => f,
                             Err(_) => {
@@ -84,6 +83,7 @@ pub mod out {
             let mut file = match OpenOptions::new()
                 .write(true)
                 .append(true)
+                .create(true)
                 .open(self.file_name) {
                     Ok(f) => f,
                     Err(_) => panic!("Could not open file"),
