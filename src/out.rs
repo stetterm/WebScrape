@@ -129,6 +129,8 @@ pub mod out {
 mod tests {
     use super::*;
 
+    use std::fs::{OpenOptions, self};
+    use std::io::Read;
     use std::sync::mpsc;
     use std::{thread, time};
 
@@ -152,5 +154,21 @@ mod tests {
         if let Err(_) = join.recv() {
             panic!("Could not get exit signal");
         }
+
+        let mut file = match OpenOptions::new()
+            .read(true)
+            .open("out.txt") {
+                Ok(f) => f,
+                Err(_) => panic!("Could not open file"),
+        };
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        let mut expected = String::new();
+        for _ in 0..33 {
+            expected += "hello\n";
+        }
+        assert_eq!(expected, contents);
+
+        fs::remove_file("out.txt").unwrap();
     }
 }
