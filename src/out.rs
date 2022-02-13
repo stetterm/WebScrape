@@ -127,8 +127,8 @@ mod tests {
     #[test]
     fn test_data_output() {
         let (sender, receiver) = mpsc::channel();
-        let test = out::OutThread::new(receiver, "out.txt");
-        for i in 0..33 {
+        let _test = out::OutThread::new(receiver, "out.txt");
+        for _ in 0..33 {
             sender.send("hello".to_string()).unwrap();
         }
         thread::sleep(time::Duration::from_secs(2));
