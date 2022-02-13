@@ -6,12 +6,9 @@
 /// 
 pub mod out {
 
-    use parking_lot::RwLock;
-
     use std::fs::OpenOptions;
     use std::io::prelude::*;
     use std::io::Error;
-    use std::sync::Arc;
     use std::sync::mpsc;
     use std::thread;
 
@@ -29,8 +26,6 @@ pub mod out {
     /// 
     pub struct OutThread {
         file_name: &'static str,
-        buf: Arc<RwLock<Vec<String>>>,
-        pub thread: Option<thread::JoinHandle<()>>,
     }
 
     ///
@@ -38,22 +33,22 @@ pub mod out {
     /// the output thread struct.
     /// 
     impl OutThread {
-        pub fn new(pipe: mpsc::Receiver<String>, file_name: &'static str) -> OutThread {
-            let buf: Arc<RwLock<Vec<String>>> = Arc::new(RwLock::new(Vec::with_capacity(BUF_SIZE)));
+        pub fn new(pipe: mpsc::Receiver<String>, file_name: &'static str, exit_sig: mpsc::Sender<Result<(), Error>>) -> OutThread {
+            let mut buf: Vec<String> = Vec::with_capacity(BUF_SIZE);
             let mut count = 0;
 
-            let thread_buf = Arc::clone(&buf);
             let mut ret_out_thread = OutThread {
                 file_name: file_name,
-                buf: Arc::clone(&buf),
-                thread: None,
             };
-            let thread = thread::spawn(move || loop {
+            thread::spawn(move || loop {
                 let data = match pipe.recv() {
                     Ok(s) => s,
                     Err(_) => { 
-                        if let Err(_) = ret_out_thread.flush() {
+                        if let Err(_) = ret_out_thread.flush(buf) {
                             panic!("Could not flush the buffer.");
+                        }
+                        if let Err(_) = exit_sig.send(Ok(())) {
+                            panic!("Could not send exit signal");
                         }
                         break;
                     },
@@ -69,35 +64,29 @@ pub mod out {
                             }
                     };
                     {
-                    let thread_buf = thread_buf.read();
                     for i in 0..count {
-                        if let Err(_) = file.write_all(&[thread_buf[i].as_bytes(), "\n".as_bytes()].concat()) {
+                        if let Err(_) = file.write_all(&[buf[i].as_bytes(), "\n".as_bytes()].concat()) {
                             panic!("Could not write to file: {}", file_name);
                         }
                     }
                     }
                     {
-                    let mut thread_buf = thread_buf.write();
-                    thread_buf.clear();
+                    buf.clear();
                     }
                     count = 0;
                 }
                 {
-                let mut thread_buf = thread_buf.write();
-                thread_buf.push(data);
+                buf.push(data);
                 }
                 count += 1;
             });
 
             OutThread {
                 file_name: file_name,
-                buf: Arc::clone(&buf),
-                thread: Some(thread),
             }
         }
 
-        fn flush(&mut self) -> Result<(), Error> {
-            let buffer = self.buf.write();
+        fn flush(&mut self, buf: Vec<String>) -> Result<(), Error> {
             let mut file = match OpenOptions::new()
                 .write(true)
                 .append(true)
@@ -105,8 +94,8 @@ pub mod out {
                     Ok(f) => f,
                     Err(_) => panic!("Could not open file"),
             };
-            for i in 0..buffer.len() {
-                file.write(&[buffer[i].as_bytes(), "\n".as_bytes()].concat())?;
+            for i in 0..buf.len() {
+                file.write(&[buf[i].as_bytes(), "\n".as_bytes()].concat())?;
             }
 
             Ok(())
@@ -129,11 +118,16 @@ mod tests {
 
     #[test]
     fn test_data_output() {
+        let (sig, join) = mpsc::channel();
+        {
         let (sender, receiver) = mpsc::channel();
-        let test = out::OutThread::new(receiver, "out.txt");
+        let _ = out::OutThread::new(receiver, "out.txt", sig);
         for _ in 0..33 {
             sender.send("hello".to_string()).unwrap();
         }
-        
+        }
+        if let Err(_) = join.recv() {
+            panic!("Could not get exit signal");
+        }
     }
 }
