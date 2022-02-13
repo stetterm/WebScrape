@@ -1,57 +1,76 @@
 ///
 /// Module for a thread that loads
 /// the data into the output file
-/// every 10 blocks that it receives
+/// every 64 blocks that it receives
 /// from the mpsc channel.
 /// 
 pub mod out {
 
     use std::fs::OpenOptions;
-    use std::io::prelude::*;
     use std::io::Error;
+    use std::io::ErrorKind;
+    use std::io::prelude::*;
     use std::sync::mpsc;
     use std::thread;
 
-    const BUF_SIZE: usize = 16;
+    // Change value to adjust buffer size for IO
+    const BUF_SIZE: usize = 64;
 
     ///
     /// Struct to represent the
     /// thread that loads the scraped
     /// data into the file.
     /// 
-    /// pipe: receiving end of the mpcs channel.
-    /// file_name: name of the output file.
-    /// buf: the buffer that holds a number of strings before loading
-    ///         to a file.
-    /// 
-    pub struct OutThread {
-        file_name: &'static str,
-    }
+    pub struct OutThread;
 
     ///
     /// Implementation block for
     /// the output thread struct.
     /// 
     impl OutThread {
-        pub fn new(pipe: mpsc::Receiver<String>, file_name: &'static str, exit_sig: mpsc::Sender<Result<(), Error>>) -> OutThread {
-            let mut buf: Vec<String> = Vec::with_capacity(BUF_SIZE);
-            let mut count = 0;
 
-            let mut ret_out_thread = OutThread {
-                file_name: file_name,
-            };
+        ///
+        /// Called to initialize the OutThread struct.
+        /// pipe: Receiver of type string to get the strings
+        ///         to write to the file.
+        /// file_name: name of the file to use.
+        /// exit_sig: Sender of Result type to send a signal
+        ///         to the calling thread when execution has finished.
+        /// 
+        /// After new is called, the calling thread must call
+        /// recv on the receiving end of exit_sig, otherwise the thread
+        /// will likely not finished writing to the file.
+        /// 
+        pub fn init(pipe: mpsc::Receiver<String>, file_name: &'static str, exit_sig: mpsc::Sender<Result<(), Error>>) {
+
+            // buf is the buffer used for file IO
+            let mut buf: Vec<String> = Vec::with_capacity(BUF_SIZE);
+
+            // Creates the struct used by the thread
+            // to flush the buffer.
+            let out = OutThread;
+
+            // Here is the main thread loop for
+            // the output.
             thread::spawn(move || loop {
+
+                // Receives new data from the pipe or
+                // flushes the buffer and returns if
+                // there are no more senders available.
                 let data = match pipe.recv() {
                     Ok(s) => s,
                     Err(_) => { 
-                        if let Err(_) = ret_out_thread.flush(buf) {
-                            panic!("Could not flush the buffer.");
+                        if let Err(_) = out.flush(buf, file_name) {
+                            panic!("Cannot write to output file");
                         }
                         while let Err(_) = exit_sig.send(Ok(())) {}
                         break;
                     },
                 };
-                if count == BUF_SIZE {
+
+                // If the buffer is full, then the thread writes
+                // all the data in the buffer to the file.
+                if buf.len() == BUF_SIZE {
                     let mut file = match OpenOptions::new()
                         .write(true)
                         .append(true)
@@ -62,32 +81,39 @@ pub mod out {
                                 panic!("Could not open file: {}", file_name);
                             }
                     };
-                    for i in 0..count {
+                    for i in 0..buf.len() {
                         if let Err(_) = file.write_all(&[buf[i].as_bytes(), "\n".as_bytes()].concat()) {
                             panic!("Could not write to file: {}", file_name);
                         }
                     }
-                    buf.clear();
-                    count = 0;
-                }
-                buf.push(data);
-                count += 1;
-            });
 
-            OutThread {
-                file_name: file_name,
-            }
+                    // Clears the buffer after writing.
+                    buf.clear();
+                }
+
+                // Pushes the new value from the channel
+                // into the buffer.
+                buf.push(data);
+            });
         }
 
-        fn flush(&mut self, buf: Vec<String>) -> Result<(), Error> {
-            let mut file = match OpenOptions::new()
+        ///
+        /// Flushes the remaining strings in the
+        /// buffer and writes them to the file.
+        /// If the file cannot be opened, it panics.
+        /// If the file cannot be written to, it returns
+        /// 
+        fn flush(&self, buf: Vec<String>, file_name: &'static str) -> Result<(), Error> {
+            
+            // Opens the file or returns Error.
+            let mut file = OpenOptions::new()
                 .write(true)
                 .append(true)
                 .create(true)
-                .open(self.file_name) {
-                    Ok(f) => f,
-                    Err(_) => panic!("Could not open file"),
-            };
+                .open(file_name)?;
+
+            // Writes the buffer contents to the
+            // file or returns Error.
             for i in 0..buf.len() {
                 file.write(&[buf[i].as_bytes(), "\n".as_bytes()].concat())?;
             }
@@ -97,6 +123,9 @@ pub mod out {
     }
 }
 
+///
+/// Tests module
+/// 
 mod tests {
     use super::*;
 
@@ -115,7 +144,7 @@ mod tests {
         let (sig, join) = mpsc::channel();
         {
         let (sender, receiver) = mpsc::channel();
-        let _ = out::OutThread::new(receiver, "out.txt", sig);
+        out::OutThread::init(receiver, "out.txt", sig);
         for _ in 0..33 {
             sender.send("hello".to_string()).unwrap();
         }
