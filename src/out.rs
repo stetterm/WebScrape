@@ -10,6 +10,7 @@ pub mod out {
 
     use std::fs::OpenOptions;
     use std::io::prelude::*;
+    use std::io::Error;
     use std::sync::Arc;
     use std::sync::mpsc;
     use std::thread;
@@ -37,14 +38,23 @@ pub mod out {
     /// 
     impl OutThread {
         pub fn new(pipe: mpsc::Receiver<String>, file_name: &'static str) -> OutThread {
-            let mut buf = Arc::new(RwLock::new(Vec::with_capacity(BUF_SIZE)));
+            let buf: Arc<RwLock<Vec<String>>> = Arc::new(RwLock::new(Vec::with_capacity(BUF_SIZE)));
             let mut count = 0;
 
             let thread_buf = Arc::clone(&buf);
+            let mut ret_out_thread = OutThread {
+                file_name: file_name,
+                buf: Arc::clone(&buf),
+            };
             thread::spawn(move || loop {
                 let data = match pipe.recv() {
                     Ok(s) => s,
-                    Err(e) => break,
+                    Err(_) => { 
+                        if let Err(_) = ret_out_thread.flush() {
+                            panic!("Could not flush the buffer.");
+                        }
+                        break;
+                    },
                 };
                 if count == BUF_SIZE {
                     let mut file = match OpenOptions::new()
@@ -52,20 +62,29 @@ pub mod out {
                         .append(true)
                         .open(file_name) {
                             Ok(f) => f,
-                            Err(e) => {
+                            Err(_) => {
                                 panic!("Could not open file: {}", file_name);
                             }
                     };
-                    // let thread_buf = thread_buf.read();
-                    // for i in 0..count {
-                    //     if let Err(e) = file.write_all(thread_buf[i].as_bytes()) {
-                    //         panic!("Could not write to file: {}", file_name);
-                    //     }
-                    // }
+                    {
+                    let thread_buf = thread_buf.read();
+                    for i in 0..count {
+                        if let Err(_) = file.write_all(&[thread_buf[i].as_bytes(), "\n".as_bytes()].concat()) {
+                            panic!("Could not write to file: {}", file_name);
+                        }
+                    }
+                    }
+                    {
+                    let mut thread_buf = thread_buf.write();
+                    thread_buf.clear();
+                    }
+                    count = 0;
                 }
-                // let buf = buf.lock();
-
-                // count += 1;
+                {
+                let mut thread_buf = thread_buf.write();
+                thread_buf.push(data);
+                }
+                count += 1;
             });
 
             OutThread {
@@ -73,16 +92,45 @@ pub mod out {
                 buf: Arc::clone(&buf),
             }
         }
+
+        fn flush(&mut self) -> Result<(), Error> {
+            let buffer = self.buf.write();
+            let mut file = match OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(self.file_name) {
+                    Ok(f) => f,
+                    Err(_) => panic!("Could not open file"),
+            };
+            for i in 0..buffer.len() {
+                file.write(&[buffer[i].as_bytes(), "\n".as_bytes()].concat())?;
+            }
+
+            Ok(())
+        }
     }
 }
 
 mod tests {
     use super::*;
 
+    use std::sync::mpsc;
+    use std::{thread, time};
+
     #[test]
     fn vec_test() {
         let mut m = Vec::with_capacity(10);
         m.push(6);
         dbg!(m);
+    }
+
+    #[test]
+    fn test_data_output() {
+        let (sender, receiver) = mpsc::channel();
+        let test = out::OutThread::new(receiver, "out.txt");
+        for i in 0..33 {
+            sender.send("hello".to_string()).unwrap();
+        }
+        thread::sleep(time::Duration::from_secs(2));
     }
 }
