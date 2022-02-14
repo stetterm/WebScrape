@@ -8,7 +8,6 @@ pub mod out {
 
     use std::fs::OpenOptions;
     use std::io::Error;
-    use std::io::ErrorKind;
     use std::io::prelude::*;
     use std::sync::mpsc;
     use std::thread;
