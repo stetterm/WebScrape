@@ -14,23 +14,23 @@ pub mod scrape {
     /// Struct used to hold the url to
     /// target and the regex to use.
     /// 
-    pub struct ScrapeJob<'a> {
+    pub struct ScrapeJob {
         out: mpsc::Sender<String>,
-        regex: &'a str,
-        url: &'a str,
+        regex: String,
+        url: String,
     }
 
     ///
     /// Implementation block for the webscraping
     /// struct.
     /// 
-    impl<'a> ScrapeJob<'a> {
+    impl ScrapeJob {
 
         ///
         /// Returns a new instance of the ScrapeUtil
         /// with the specified url and regex.
         /// 
-        pub fn new(out: mpsc::Sender<String>, regex: &'a str, url: &'a str) -> ScrapeJob<'a> {
+        pub fn new(out: mpsc::Sender<String>, regex: String, url: String) -> ScrapeJob {
             ScrapeJob {
                 out,
                 regex,
@@ -44,8 +44,8 @@ pub mod scrape {
         /// specified regex.
         /// 
         pub fn scrape(&self) -> Result<(), Box<dyn std::error::Error>> {
-            let regex = Regex::new(self.regex)?;
-            let body = reqwest::blocking::get(self.url)?
+            let regex = Regex::new(&self.regex)?;
+            let body = reqwest::blocking::get(&self.url)?
                 .text()?;
             for line in body.split(".") {
                 if regex.is_match(&line) {
@@ -57,7 +57,7 @@ pub mod scrape {
         }
     }
 
-    pub type JobPipe<'a> = Arc<Mutex<mpsc::Receiver<ScrapeJob<'a>>>>;
+    pub type JobPipe<'a> = Arc<Mutex<mpsc::Receiver<ScrapeJob>>>;
 }
 
 #[cfg(test)]

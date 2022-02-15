@@ -109,13 +109,13 @@ pub mod web_scrape {
         /// 
         pub fn execute(&self) {
             let (exit_send, exit_recv) = mpsc::channel();
-            let (job_send, job_recv) = mpsc::channel();
             let mut thread_handles = vec![];
             {
+                let (job_send, job_recv) = mpsc::channel();
                 let job_recv = Arc::new(Mutex::new(job_recv));
                 let (io_send, io_recv) = mpsc::channel();
                 OutThread::init(io_recv, String::from(&self.file_name), exit_send);
-                for i in 0..self.thread_count {
+                for _ in 0..self.thread_count {
                     let thread_receiver = Arc::clone(&job_recv);
                     thread_handles.push(thread::spawn(move || loop {
                         {
@@ -133,6 +133,20 @@ pub mod web_scrape {
                         }
                     }));
                 }
+                for url in self.urls.iter() {
+                    let new_job = ScrapeJob::new(io_send.clone(),
+                        self.regex.to_string(), url.to_string()
+                    );
+                    job_send.send(new_job);
+                }
+            }
+            for handle in thread_handles {
+                if let Err(_) = handle.join() {
+                    println!("Could not get join handle");
+                }
+            }
+            if let Err(_) = exit_recv.recv() {
+                panic!("Could not receive error signal");
             }
         }
     }
