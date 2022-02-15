@@ -50,7 +50,6 @@ pub mod scrape {
             for line in body.split(".") {
                 if regex.is_match(&line) {
                     while let Err(_) = self.out.send(line.to_string()) {}
-                    dbg!("Match!");
                 }
             }
 
@@ -83,15 +82,34 @@ mod tests {
     }
 
     #[test]
+    fn simple_regex() {
+        let test = Regex::new(
+            r"hello"
+        ).unwrap();
+        let text = "hello there sir\ni am here";
+        for line in text.split('\n') {
+            if test.is_match(&line) {
+                println!("{}", &line);
+            }
+        }
+    }
+
+    #[test]
+    fn download_google_homepage() {
+        let body = reqwest::blocking::get("https://google.com").unwrap()
+            .text().unwrap();
+        println!("{}", body);
+    }
+
+    #[test]
     fn test_scrape() {
         let (test_send, test_recv) = mpsc::channel();
         let test_job = ScrapeJob::new(
         test_send,
-            String::from("hello"),
+            String::from("google"),
             String::from("https://www.google.com"),
         );
         test_job.scrape().unwrap();
-        dbg!("made it here");
         let mut next_scrape = test_recv.recv();
         while let Ok(ref s) = next_scrape {
             println!("{}", s);
