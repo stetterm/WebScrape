@@ -137,7 +137,9 @@ pub mod web_scrape {
                     let new_job = ScrapeJob::new(io_send.clone(),
                         self.regex.to_string(), url.to_string()
                     );
-                    job_send.send(new_job);
+                    if let Err(_) = job_send.send(new_job) {
+                        println!("Could not send job: {}", url);
+                    }
                 }
             }
             for handle in thread_handles {

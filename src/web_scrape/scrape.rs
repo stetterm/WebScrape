@@ -44,12 +44,13 @@ pub mod scrape {
         /// specified regex.
         /// 
         pub fn scrape(&self) -> Result<(), Box<dyn std::error::Error>> {
-            let regex = Regex::new(&self.regex)?;
+            let regex = Regex::new(&[r"", &self.regex].concat())?;
             let body = reqwest::blocking::get(&self.url)?
                 .text()?;
             for line in body.split(".") {
                 if regex.is_match(&line) {
                     while let Err(_) = self.out.send(line.to_string()) {}
+                    dbg!("Match!");
                 }
             }
 
@@ -62,8 +63,12 @@ pub mod scrape {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use regex::Regex;
     
+    use std::sync::mpsc;
+
     #[test]
     fn regex_test() {
         let test = Regex::new(
@@ -74,6 +79,23 @@ mod tests {
             if test.is_match(line) {
                 println!("{}", &line);
             }
+        }
+    }
+
+    #[test]
+    fn test_scrape() {
+        let (test_send, test_recv) = mpsc::channel();
+        let test_job = ScrapeJob::new(
+        test_send,
+            String::from("hello"),
+            String::from("https://www.google.com"),
+        );
+        test_job.scrape().unwrap();
+        dbg!("made it here");
+        let mut next_scrape = test_recv.recv();
+        while let Ok(ref s) = next_scrape {
+            println!("{}", s);
+            next_scrape = test_recv.recv();
         }
     }
 }
