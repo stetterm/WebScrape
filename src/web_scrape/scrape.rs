@@ -1,3 +1,5 @@
+pub use scrape::ScrapeJob;
+
 ///
 /// Module for performing the web scrape
 /// operations. Accessed by the threads
@@ -5,16 +7,16 @@
 /// 
 pub mod scrape {
 
-    use std::sync::mpsc;
+    use std::sync::{Arc, Mutex, mpsc};
     use regex::Regex;
 
     ///
     /// Struct used to hold the url to
     /// target and the regex to use.
     /// 
-    pub struct ScrapeUtil<'a> {
+    pub struct ScrapeJob<'a> {
         out: mpsc::Sender<String>,
-        regex: Regex,
+        regex: &'a str,
         url: &'a str,
     }
 
@@ -22,14 +24,14 @@ pub mod scrape {
     /// Implementation block for the webscraping
     /// struct.
     /// 
-    impl<'a> ScrapeUtil<'a> {
+    impl<'a> ScrapeJob<'a> {
 
         ///
         /// Returns a new instance of the ScrapeUtil
         /// with the specified url and regex.
         /// 
-        pub fn new(out: mpsc::Sender<String>, regex: Regex, url: &'a str) -> ScrapeUtil<'a> {
-            ScrapeUtil {
+        pub fn new(out: mpsc::Sender<String>, regex: &'a str, url: &'a str) -> ScrapeJob<'a> {
+            ScrapeJob {
                 out,
                 regex,
                 url,
@@ -42,10 +44,11 @@ pub mod scrape {
         /// specified regex.
         /// 
         pub fn scrape(&self) -> Result<(), Box<dyn std::error::Error>> {
+            let regex = Regex::new(self.regex)?;
             let body = reqwest::blocking::get(self.url)?
                 .text()?;
             for line in body.split(".") {
-                if self.regex.is_match(&line) {
+                if regex.is_match(&line) {
                     while let Err(_) = self.out.send(line.to_string()) {}
                 }
             }
@@ -53,6 +56,8 @@ pub mod scrape {
             Ok(())
         }
     }
+
+    pub type JobPipe<'a> = Arc<Mutex<mpsc::Receiver<ScrapeJob<'a>>>>;
 }
 
 #[cfg(test)]

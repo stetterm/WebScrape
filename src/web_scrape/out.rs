@@ -1,3 +1,5 @@
+pub use out::OutThread;
+
 ///
 /// Module for a thread that loads
 /// the data into the output file
@@ -40,7 +42,7 @@ pub mod out {
         /// recv on the receiving end of exit_sig, otherwise the thread
         /// will likely not finished writing to the file.
         /// 
-        pub fn init(pipe: mpsc::Receiver<String>, file_name: &'static str, exit_sig: mpsc::Sender<Result<(), Error>>) {
+        pub fn init(pipe: mpsc::Receiver<String>, file_name: String, exit_sig: mpsc::Sender<Result<(), Error>>) {
 
             // buf is the buffer used for file IO
             let mut buf: Vec<String> = Vec::with_capacity(BUF_SIZE);
@@ -59,7 +61,7 @@ pub mod out {
                 let data = match pipe.recv() {
                     Ok(s) => s,
                     Err(_) => { 
-                        if let Err(_) = out.flush(buf, file_name) {
+                        if let Err(_) = out.flush(buf, String::from(&file_name)) {
                             panic!("Cannot write to output file");
                         }
                         while let Err(_) = exit_sig.send(Ok(())) {}
@@ -74,15 +76,15 @@ pub mod out {
                         .write(true)
                         .append(true)
                         .create(true)
-                        .open(file_name) {
+                        .open(&file_name) {
                             Ok(f) => f,
                             Err(_) => {
-                                panic!("Could not open file: {}", file_name);
+                                panic!("Could not open file: {}", &file_name);
                             }
                     };
                     for i in 0..buf.len() {
                         if let Err(_) = file.write_all(&[buf[i].as_bytes(), "\n".as_bytes()].concat()) {
-                            panic!("Could not write to file: {}", file_name);
+                            panic!("Could not write to file: {}", &file_name);
                         }
                     }
 
@@ -102,7 +104,7 @@ pub mod out {
         /// If the file cannot be opened, it panics.
         /// If the file cannot be written to, it returns
         /// 
-        fn flush(&self, buf: Vec<String>, file_name: &'static str) -> Result<(), Error> {
+        fn flush(&self, buf: Vec<String>, file_name: String) -> Result<(), Error> {
             
             // Opens the file or returns Error.
             let mut file = OpenOptions::new()
@@ -145,7 +147,7 @@ mod tests {
         let (sig, join) = mpsc::channel();
         {
         let (sender, receiver) = mpsc::channel();
-        out::OutThread::init(receiver, "out.txt", sig);
+        out::OutThread::init(receiver, "out.txt".to_string(), sig);
         for _ in 0..33 {
             sender.send("hello".to_string()).unwrap();
         }
