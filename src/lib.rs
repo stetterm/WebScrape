@@ -153,3 +153,25 @@ pub mod web_scrape {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::web_scrape::WebScrape;
+
+    use super::*;
+
+    use std::fs;
+
+    #[test]
+    fn google_scrape() {
+        WebScrape::new(5)
+            .add_url("https://google.com")
+            .add_url("https://youtube.com")
+            .add_url("https://en.wikipedia.org/wiki/Google")
+            .add_url("https://www.conservapedia.com/Google")
+            .set_regex("google")
+            .set_file("out.txt")
+            .execute();
+        // fs::remove_file("out.txt").unwrap();
+    }
+}

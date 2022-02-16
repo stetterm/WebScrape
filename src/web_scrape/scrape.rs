@@ -49,7 +49,7 @@ pub mod scrape {
                 .text()?;
             for line in body.split(".") {
                 if regex.is_match(&line) {
-                    while let Err(_) = self.out.send(line.to_string()) {}
+                    while let Err(_) = self.out.send([line.to_string(), String::from([": ", &self.url, "\n"].concat())].concat()) {}
                 }
             }
 
